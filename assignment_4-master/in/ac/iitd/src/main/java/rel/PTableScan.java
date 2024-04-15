@@ -13,10 +13,16 @@ import org.apache.calcite.schema.Table;
 import convention.PConvention;
 import manager.StorageManager;
 
+import java.util.Arrays;
 import java.util.List;
 
 
 public class PTableScan extends TableScan implements PRel {
+
+    // Empty constructor
+//    public PTableScan(){
+//
+//    }
 
     public PTableScan(RelOptCluster cluster,
                         RelTraitSet traitSet,
@@ -78,7 +84,6 @@ public class PTableScan extends TableScan implements PRel {
                 num_fixed_length_columns++;
             }
         }
-
         return true;
     }
 
@@ -133,6 +138,7 @@ public class PTableScan extends TableScan implements PRel {
                 new_row[i] = row[fixed_ptr++];
             }
         }
+//        System.out.println("Printing the object in Table Scan: " + Arrays.toString(new_row));
         return new_row;
     }
 }

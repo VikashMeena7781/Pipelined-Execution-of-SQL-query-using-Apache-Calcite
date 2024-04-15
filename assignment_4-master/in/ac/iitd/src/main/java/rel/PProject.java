@@ -6,15 +6,20 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 
 import convention.PConvention;
 
+import java.util.Arrays;
 import java.util.List;
 
 // Hint: Think about alias and arithmetic operations
 public class PProject extends Project implements PRel {
 
+    RelNode input;
     public PProject(
             RelOptCluster cluster,
             RelTraitSet traits,
@@ -22,6 +27,7 @@ public class PProject extends Project implements PRel {
             List<? extends RexNode> projects,
             RelDataType rowType) {
         super(cluster, traits, ImmutableList.of(), input, projects, rowType);
+        this.input=input;
         assert getConvention() instanceof PConvention;
     }
 
@@ -41,6 +47,10 @@ public class PProject extends Project implements PRel {
     public boolean open(){
         logger.trace("Opening PProject");
         /* Write your code here */
+        if (input instanceof PRel) {
+            PRel pInput = (PRel) input;
+            return pInput.open();
+        }
         return false;
     }
 
@@ -49,7 +59,10 @@ public class PProject extends Project implements PRel {
     public void close(){
         logger.trace("Closing PProject");
         /* Write your code here */
-        return;
+        if (input instanceof PRel) {
+            PRel pInput = (PRel) input;
+            pInput.close();
+        }
     }
 
     // returns true if there is a next row, false otherwise
@@ -57,6 +70,10 @@ public class PProject extends Project implements PRel {
     public boolean hasNext(){
         logger.trace("Checking if PProject has next");
         /* Write your code here */
+        if (input instanceof PRel) {
+            PRel pInput = (PRel) input;
+            return pInput.hasNext();
+        }
         return false;
     }
 
@@ -65,6 +82,89 @@ public class PProject extends Project implements PRel {
     public Object[] next(){
         logger.trace("Getting next row from PProject");
         /* Write your code here */
+        if (input instanceof PRel && ((PRel) input).hasNext()) {
+            Object[] inputRow = ((PRel) input).next();
+//            System.out.println("Printing the object in Project: " + Arrays.toString(inputRow));
+            Object[] outputRow = new Object[getProjects().size()];
+
+            // Apply each projection expression to the input row
+            for (int i = 0; i < getProjects().size(); i++) {
+                // This is a simplification; real implementation might involve more complex expression evaluation
+                outputRow[i] = evaluateExpression(getProjects().get(i), inputRow);
+            }
+//            System.out.println("Printing the object after Projection: " + Arrays.toString(outputRow));
+            return outputRow;
+        }
         return null;
+    }
+
+    private Object evaluateExpression(RexNode expression, Object[] inputRow) {
+        if (expression instanceof RexInputRef) {
+            // Handle direct field references
+            RexInputRef ref = (RexInputRef) expression;
+            return inputRow[ref.getIndex()];
+        } else if (expression instanceof RexLiteral) {
+            // Handle literals
+            RexLiteral literal = (RexLiteral) expression;
+            return literal.getValue3(); // getValue3() is used to get the Java comparable object
+        } else if (expression instanceof RexCall) {
+            // Handle function calls (arithmetic operations)
+            RexCall call = (RexCall) expression;
+            Object result = null;
+            List<RexNode> operands = call.getOperands();
+            switch (call.getKind()) {
+                case PLUS:
+                    result = add(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                case MINUS:
+                    result = subtract(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                case TIMES:
+                    result = multiply(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                case DIVIDE:
+                    result = divide(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                default:
+                    throw new UnsupportedOperationException("Unsupported operation: " + call.getKind());
+            }
+            return result;
+        } else {
+            throw new IllegalArgumentException("Unsupported RexNode type: " + expression.getClass());
+        }
+    }
+
+    private Object add(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            return ((Number) a).doubleValue() + ((Number) b).doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid arguments for add: " + a + ", " + b);
+    }
+
+    private Object subtract(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            return ((Number) a).doubleValue() - ((Number) b).doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid arguments for subtract: " + a + ", " + b);
+    }
+
+    private Object multiply(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            return ((Number) a).doubleValue() * ((Number) b).doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid arguments for multiply: " + a + ", " + b);
+    }
+
+    private Object divide(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            double divisor = ((Number) b).doubleValue();
+            if (divisor == 0) throw new ArithmeticException("Division by zero");
+            return ((Number) a).doubleValue() / divisor;
+        }
+        throw new IllegalArgumentException("Invalid arguments for divide: " + a + ", " + b);
     }
 }

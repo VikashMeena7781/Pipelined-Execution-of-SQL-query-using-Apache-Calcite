@@ -52,7 +52,6 @@ public class StorageManager {
     public void loadFile(String csvFile, List<RelDataType> typeList) {
 
         logger.trace("Loading file: " + csvFile);
-
         String table_name = csvFile;
 
         if(csvFile.endsWith(".csv")) {
