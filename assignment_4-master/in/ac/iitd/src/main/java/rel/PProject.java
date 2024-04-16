@@ -87,9 +87,7 @@ public class PProject extends Project implements PRel {
 //            System.out.println("Printing the object in Project: " + Arrays.toString(inputRow));
             Object[] outputRow = new Object[getProjects().size()];
 
-            // Apply each projection expression to the input row
             for (int i = 0; i < getProjects().size(); i++) {
-                // This is a simplification; real implementation might involve more complex expression evaluation
                 outputRow[i] = evaluateExpression(getProjects().get(i), inputRow);
             }
 //            System.out.println("Printing the object after Projection: " + Arrays.toString(outputRow));
@@ -110,7 +108,7 @@ public class PProject extends Project implements PRel {
         } else if (expression instanceof RexCall) {
             // Handle function calls (arithmetic operations)
             RexCall call = (RexCall) expression;
-            Object result = null;
+            Object result ;
             List<RexNode> operands = call.getOperands();
             switch (call.getKind()) {
                 case PLUS:
@@ -140,21 +138,39 @@ public class PProject extends Project implements PRel {
 
     private Object add(Object a, Object b) {
         if (a instanceof Number && b instanceof Number) {
-            return ((Number) a).doubleValue() + ((Number) b).doubleValue();
+            if (a instanceof Double || b instanceof Double) {
+                return ((Number) a).doubleValue() + ((Number) b).doubleValue();
+            } else if (a instanceof Float || b instanceof Float) {
+                return ((Number) a).floatValue() + ((Number) b).floatValue();
+            } else{
+                return ((Number) a).intValue() + ((Number) b).intValue();
+            }
         }
         throw new IllegalArgumentException("Invalid arguments for add: " + a + ", " + b);
     }
 
     private Object subtract(Object a, Object b) {
         if (a instanceof Number && b instanceof Number) {
-            return ((Number) a).doubleValue() - ((Number) b).doubleValue();
+            if (a instanceof Double || b instanceof Double) {
+                return ((Number) a).doubleValue() - ((Number) b).doubleValue();
+            } else if (a instanceof Float || b instanceof Float) {
+                return ((Number) a).floatValue() - ((Number) b).floatValue();
+            } else{
+                return ((Number) a).intValue() - ((Number) b).intValue();
+            }
         }
         throw new IllegalArgumentException("Invalid arguments for subtract: " + a + ", " + b);
     }
 
     private Object multiply(Object a, Object b) {
         if (a instanceof Number && b instanceof Number) {
-            return ((Number) a).doubleValue() * ((Number) b).doubleValue();
+            if (a instanceof Double || b instanceof Double) {
+                return ((Number) a).doubleValue() * ((Number) b).doubleValue();
+            } else if (a instanceof Float || b instanceof Float) {
+                return ((Number) a).floatValue() * ((Number) b).floatValue();
+            } else{
+                return ((Number) a).intValue() * ((Number) b).intValue();
+            }
         }
         throw new IllegalArgumentException("Invalid arguments for multiply: " + a + ", " + b);
     }
@@ -163,8 +179,15 @@ public class PProject extends Project implements PRel {
         if (a instanceof Number && b instanceof Number) {
             double divisor = ((Number) b).doubleValue();
             if (divisor == 0) throw new ArithmeticException("Division by zero");
-            return ((Number) a).doubleValue() / divisor;
+            if (a instanceof Double || b instanceof Double) {
+                return ((Number) a).doubleValue() / divisor;
+            } else if (a instanceof Float || b instanceof Float) {
+                return ((Number) a).floatValue() / (float) divisor;
+            } else{
+                return ((Number) a).intValue() / (int) divisor;
+            }
         }
         throw new IllegalArgumentException("Invalid arguments for divide: " + a + ", " + b);
     }
+
 }

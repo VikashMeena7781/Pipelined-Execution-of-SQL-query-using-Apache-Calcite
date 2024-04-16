@@ -1,5 +1,6 @@
 package rel;
 
+import javafx.beans.binding.ObjectExpression;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -27,10 +28,14 @@ public class PAggregate extends Aggregate implements PRel {
         super(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls);
         assert getConvention() instanceof PConvention;
     }
-    private final LinkedHashMap<String, AggregationData> resultMap = new LinkedHashMap<>();
+    //    private final HashMap<String, AggregationData> resultMap = new HashMap<>();
+    private final LinkedHashMap<List<Object>, AggregationData> resultMap = new LinkedHashMap<>();
 
+//    private int num_rows_returned = 0;
+//    private List<Object[]> rowsreq;
+//    private List<Object[]> answer;
 
-    private Iterator<Map.Entry<String, AggregationData>> resultIterator;
+    private Iterator<Map.Entry<List<Object>, AggregationData>> resultIterator;
     @Override
     public Aggregate copy(RelTraitSet traitSet, RelNode input, ImmutableBitSet groupSet,
                           List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
@@ -51,7 +56,9 @@ public class PAggregate extends Aggregate implements PRel {
             ((PRel) input).open();
             while(((PRel)input).hasNext()) {
                 Object[] row = ((PRel) input).next();
-                String key = groupby(row);
+                List<Object> key = groupby(row);
+//                System.out.println("row: " + key);
+
 //                System.out.println("key: " + key);
                 resultMap.putIfAbsent(key, new AggregationData());
 //                System.out.println("updated into the aggregation function");
@@ -75,6 +82,7 @@ public class PAggregate extends Aggregate implements PRel {
         resultMap.clear();
 //        System.out.println("size after clearing" + resultMap.size());
 //        System.out.println("cleared the result map");
+//        num_rows_returned = 0;
         return;
     }
 
@@ -92,62 +100,112 @@ public class PAggregate extends Aggregate implements PRel {
     @Override
     public Object[] next() {
         logger.trace("Getting next row from PAggregate");
+//        System.out.println("in the next function");
         boolean val = hasNext();
+
         if (!val) {
             return null;
         }
-//        System.out.println("in the next function");
-        Map.Entry<String, AggregationData> entry = resultIterator.next();
+        Map.Entry<List<Object>, AggregationData> entry = resultIterator.next();
         return formatResult(entry.getKey(), entry.getValue());
     }
 
-    private String groupby(Object[] row) {
-        // Use StringBuilder for efficient string concatenation
-        StringBuilder keyBuilder = new StringBuilder();
+    private List<Object> groupby(Object[] row) {
+        // List to hold group-by values
+        List<Object> keyValues = new ArrayList<>();
+//        System.out.println("group set empty: " + groupSet.isEmpty());
         // Iterate through all bits set in groupSet (the group-by indices)
-        for (int i = groupSet.nextSetBit(0); i >= 0; i = groupSet.nextSetBit(i + 1)) {
-            if (keyBuilder.length() > 0) keyBuilder.append("$");
-            keyBuilder.append(row[i].toString());  // Append the value at index i, converting it to string
+        for (int i = groupSet.nextSetBit(0); i >= 0; i = groupSet.nextSetBit(i + 1)){
+
+            keyValues.add(row[i]);  // Add the value at index i
         }
-//        System.out.println("grouped value: " + keyBuilder.toString());
-        return keyBuilder.toString();  // Return the concatenated key
+//        if (keyValues.isEmpty()) {
+//            return new Object[0];  // Correct syntax to return an empty array
+//        }
+        // Convert list to array and return
+        return keyValues;
     }
-    private Object[] decodeGroupKey(String key) {
-        // Split the key by the comma delimiter to get the original values
-        String[] parts = key.split("$");
-//        System.out.println("decoded the group string");
-        return Arrays.copyOf(parts, parts.length, Object[].class);  // Convert String array to Object array
+    //    private Object[] decodeGroupKey(String key) {
+//        // Split the key by the comma delimiter to get the original values
+//        String[] parts = key.split("$");
+////        System.out.println("decoded the group string");
+//        return Arrays.copyOf(parts, parts.length, Object[].class);  // Convert String array to Object array
+//    }
+    private Object[] formatResult(List<Object> groupKeys, AggregationData data) {
+        // Determine the size needed for the result list including the aggregated values
+        List<Object> resultList = new ArrayList<>(groupKeys); // Initializes resultList with groupKeys
+
+        // Iterate over each AggregateCall to handle multiple aggregations in a single query
+        for (AggregateCall call : aggCalls) {
+            String aggregationType = call.getAggregation().toString();
+            String type = call.getType().toString();
+
+            switch (aggregationType) {
+                case "COUNT":
+                    resultList.add(data.getCount());
+                    break;
+
+                case "SUM":
+                    switch (type) {
+                        case "INTEGER":
+                            resultList.add(Math.round(data.getSum())); // Round to nearest integer
+                            break;
+                        case "DOUBLE":
+                            resultList.add((double) Math.round(data.getSum())); // Round to nearest integer but store as double
+                            break;
+                        case "FLOAT":
+                            resultList.add(data.getSum()); // Convert from double to float without rounding
+                            break;
+                    }
+                    break;
+
+                case "MIN":
+                    switch (type) {
+                        case "INTEGER":
+                            resultList.add((int) Math.round(data.getMin())); // Cast to integer after rounding
+                            break;
+                        case "DOUBLE":
+                            resultList.add(data.getMin()); // Keep as double
+                            break;
+                        case "FLOAT":
+                            resultList.add(data.getMin()); // Convert from double to float
+                            break;
+                    }
+                    break;
+
+                case "MAX":
+                    switch (type) {
+                        case "INTEGER":
+                            resultList.add((int) Math.round(data.getMax())); // Cast to integer after rounding
+                            break;
+                        case "DOUBLE":
+                            resultList.add(data.getMax()); // Keep as double
+                            break;
+                        case "FLOAT":
+                            resultList.add(data.getMax()); // Convert from double to float
+                            break;
+                    }
+                    break;
+
+                case "AVG":
+                    resultList.add(data.getAverage());
+                    break;
+
+                default:
+                    throw new IllegalArgumentException("Unsupported aggregation function: " + aggregationType);
+            }
+        }
+
+        // Convert resultList to array for compatibility with existing interfaces
+        return resultList.toArray(new Object[0]);
     }
-    private Object[] formatResult(String groupby, AggregationData data) {
-        // Decode the groupby key to get initial data array
-        Object[] groupKeys = decodeGroupKey(groupby);
 
-        // Determine the size needed for the result array
-        // Assuming AggregationData contains 5 aggregated values: count, sum, min, max, avg
-        Object[] result = new Object[groupKeys.length + 5];
 
-        // Copy group keys into result array
-        System.arraycopy(groupKeys, 0, result, 0, groupKeys.length);
-
-        // Append aggregation data to the result array
-        result[groupKeys.length] = data.getCount();
-//        System.out.println("cout: " + data.getCount());
-        result[groupKeys.length + 1] = data.getSum();
-//        System.out.println("sum: " + data.getSum());
-        result[groupKeys.length + 2] = data.getMin();
-//        System.out.println("min: " + data.getMin());
-        result[groupKeys.length + 3] = data.getMax();
-//        System.out.println("max: " + data.getMax());
-        result[groupKeys.length + 4] = data.getAverage();
-//        System.out.println("average: " + data.getAverage());
-
-        return result;
-    }
 
 
 
     public class AggregationData {
-        private long count = 0;  // For COUNT
+        private int count = 0;  // For COUNT
         private double sum = 0.0;  // For SUM
         private double min = Double.MAX_VALUE;  // For MIN
         private double max = Double.MIN_VALUE;  // For MAX
@@ -157,10 +215,16 @@ public class PAggregate extends Aggregate implements PRel {
         public void accumulate(Object[] row, List<AggregateCall> aggCalls) {
 //            System.out.println("in accumulate function");
             for (AggregateCall call : aggCalls) {
+//                System.out.println(call.getAggregation());
                 List<Integer> argList = call.getArgList();
                 double value = 0;
                 int functionIndex;
                 if (!argList.isEmpty()) {
+//                    System.out.println("arguement list");
+//                    for(Integer i : argList){
+//                        System.out.println(i + " ");
+//                    }
+//                    System.out.println();
 //                    System.out.println("Argument list for " + call.getAggregation() + " is not empty. Skipping this aggregation.");
                     functionIndex = call.getArgList().get(0);  // Assuming single argument functions for simplicity
 //                    System.out.println("index of value: " + call.getArgList().get(0));
@@ -180,6 +244,8 @@ public class PAggregate extends Aggregate implements PRel {
 //                    System.out.println("value: " + value);
 //                    continue;  // Skip this iteration if there are no arguments for the aggregation function
                 }
+
+
 
                 switch (call.getAggregation().toString()) {
                     case "COUNT":
@@ -205,7 +271,7 @@ public class PAggregate extends Aggregate implements PRel {
         }
 
         // Getter methods for each aggregation result
-        public long getCount() {
+        public int getCount() {
             return count;
         }
 

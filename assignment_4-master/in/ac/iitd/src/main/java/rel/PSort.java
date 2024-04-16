@@ -48,12 +48,14 @@ public class PSort extends Sort implements PRel {
     @Override
     public boolean open(){
         logger.trace("Opening PSort");
-        System.out.println("in open of sort");
+//        System.out.println("in open of sort");
         if (input instanceof PRel) {
             ((PRel) input).open();
             sortedData = new ArrayList<>();
             while (((PRel) input).hasNext()) {
-                sortedData.add(((PRel) input).next());
+                Object[] row = ((PRel) input).next();
+//                System.out.println("actor id: " + row[0]);
+                sortedData.add(row);
             }
             ((PRel) input).close();
 
@@ -63,9 +65,14 @@ public class PSort extends Sort implements PRel {
                 public int compare(Object[] o1, Object[] o2) {
                     for (RelFieldCollation field : collation.getFieldCollations()) {
                         int index = field.getFieldIndex();
-                        System.out.println("index to be sorted : " + index);
                         Comparable val1 = (Comparable) o1[index];
                         Comparable val2 = (Comparable) o2[index];
+
+                        // Handle nulls: Assume nulls last
+                        if (val1 == null && val2 == null) continue;
+                        if (val1 == null) return 1;
+                        if (val2 == null) return -1;
+
                         int result = val1.compareTo(val2);
                         if (result != 0) {
                             return field.getDirection() == RelFieldCollation.Direction.ASCENDING ? result : -result;
@@ -74,7 +81,8 @@ public class PSort extends Sort implements PRel {
                     return 0;
                 }
             });
-            System.out.println("done with sorting");
+
+//            System.out.println("done with sorting");
             currentIndex = 0; // Reset index after sorting
             return true;
         }
@@ -89,7 +97,7 @@ public class PSort extends Sort implements PRel {
             sortedData.clear();
         }
         currentIndex = 0;
-        System.out.println("clear sorted data");
+//        System.out.println("clear sorted data");
         return;
     }
 
@@ -97,7 +105,7 @@ public class PSort extends Sort implements PRel {
     @Override
     public boolean hasNext(){
         logger.trace("Checking if PSort has next");
-        System.out.println("has Next: " + (sortedData != null && currentIndex < sortedData.size()));
+//        System.out.println("has Next: " + (sortedData != null && currentIndex < sortedData.size()));
         return sortedData != null && currentIndex < sortedData.size();
     }
 
@@ -105,11 +113,12 @@ public class PSort extends Sort implements PRel {
     @Override
     public Object[] next(){
         logger.trace("Getting next row from PSort");
-        System.out.println("in next");
+//        System.out.println("in next");
         if (!hasNext()) {
             return null;
         }
-        System.out.println("current Index : " + currentIndex);
-        return sortedData.get(currentIndex++);
+        Object[] req = sortedData.get(currentIndex++);
+//        System.out.println("actor id : " + req[0]);
+        return req;
     }
 }

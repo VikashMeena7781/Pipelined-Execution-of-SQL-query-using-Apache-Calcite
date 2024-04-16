@@ -67,7 +67,7 @@ public class PJoin extends Join implements PRel {
         if (leftCopy != null && leftCopy.hasNext()) {
             currentProbeRow = leftCopy.next();
             left_size = currentProbeRow.length;
-            System.out.println("Size of left "+left_size);
+//            System.out.println("Size of left "+left_size);
         } else {
             // Left table is empty
             left_size = 0;

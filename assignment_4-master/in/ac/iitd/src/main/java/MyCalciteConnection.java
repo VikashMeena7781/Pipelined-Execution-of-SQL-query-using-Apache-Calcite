@@ -1,9 +1,13 @@
 import com.google.common.collect.ImmutableList;
 
+import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rex.*;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.util.Sources;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
@@ -42,6 +46,8 @@ import org.apache.log4j.Logger;
 import manager.StorageManager;
 import executor.QueryExecutor;
 import convention.PConvention;
+import org.checkerframework.checker.nullness.qual.Nullable;
+import rel.PProject;
 
 import java.util.Properties;
 import java.util.Collections;
@@ -209,20 +215,144 @@ public class MyCalciteConnection {
             RelNode logicalPlan = convertSql(validatedSqlNode);
             RelNode physicalPlan = logicalToPhysical(logicalPlan, logicalPlan.getTraitSet().plus(PConvention.INSTANCE), rules);
             List<Object[]> result = executeQuery(physicalPlan);
-            
-            /* 
-                Write your code here 
-                You can post-process the result here, if needed
 
+            /*
+                Write your code here
+                You can post-process the result here, if needed
             */
+            System.out.println("sqlnode "+sqlNode.toString());
+            System.out.println("logical plan "+logicalPlan.toString());
+            System.out.println("explain  "+logicalPlan.explain());
+
+
+
+
+
 
             return result;
+
         }
         catch (Exception e) {
             logger.error("Error in executing query", e);
             logger.error("Cause: ", e.getCause());
             return null;
         }
+    }
+//    public List<Object[]> executeQueryBonus(String query, RuleSet rules) {
+//        try {
+//            SqlNode sqlNode = parseSql(query);
+//            SqlNode validatedSqlNode = validateSql(sqlNode);
+//            RelNode logicalPlan = convertSql(validatedSqlNode);
+//
+//            // Retrieve the project fields from the logical plan if it's a project type
+//            List<Integer> projectFieldIndices = null;
+//            System.out.println("Hii1 "+logicalPlan.getClass());
+//            if (logicalPlan instanceof Project) {
+//                System.out.println("Hii2");
+//                Project project = (Project) logicalPlan;
+//                projectFieldIndices = project.getProjects().stream()
+//                        .filter(expr -> expr instanceof RexInputRef)
+//                        .map(expr -> ((RexInputRef) expr).getIndex())
+//                        .collect(Collectors.toList());
+//            }
+//
+//            if (projectFieldIndices == null) {
+//                throw new RuntimeException("No projection found or projection fields are not direct references");
+//            }
+//
+//            RelNode physicalPlan = logicalToPhysical(logicalPlan, logicalPlan.getTraitSet().plus(PConvention.INSTANCE), rules);
+//            List<Object[]> result = executeQuery(physicalPlan);
+//
+//            System.out.println("Size "+result.size());
+//
+//            // Post-process the result to include only the projected fields
+//            List<Object[]> filteredResult = new ArrayList<>();
+//            for (Object[] row : result) {
+//                Object[] newRow = new Object[projectFieldIndices.size()];
+//                for (int i = 0; i < projectFieldIndices.size(); i++) {
+//                    newRow[i] = row[projectFieldIndices.get(i)];
+//                }
+//                filteredResult.add(newRow);
+//            }
+//
+//            return filteredResult;
+//        }
+//        catch (Exception e) {
+//            logger.error("Error in executing query", e);
+//            logger.error("Cause: ", e.getCause());
+//            return null;
+//        }
+//    }
+
+
+    private Object evaluateExpression(RexNode expression, Object[] inputRow) {
+        if (expression instanceof RexInputRef) {
+            // Handle direct field references
+            RexInputRef ref = (RexInputRef) expression;
+            return inputRow[ref.getIndex()];
+        } else if (expression instanceof RexLiteral) {
+            // Handle literals
+            RexLiteral literal = (RexLiteral) expression;
+            return literal.getValue3(); // getValue3() is used to get the Java comparable object
+        } else if (expression instanceof RexCall) {
+            // Handle function calls (arithmetic operations)
+            RexCall call = (RexCall) expression;
+            Object result = null;
+            List<RexNode> operands = call.getOperands();
+            switch (call.getKind()) {
+                case PLUS:
+                    result = add(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                case MINUS:
+                    result = subtract(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                case TIMES:
+                    result = multiply(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                case DIVIDE:
+                    result = divide(evaluateExpression(operands.get(0), inputRow),
+                            evaluateExpression(operands.get(1), inputRow));
+                    break;
+                default:
+                    throw new UnsupportedOperationException("Unsupported operation: " + call.getKind());
+            }
+            return result;
+        } else {
+            throw new IllegalArgumentException("Unsupported RexNode type: " + expression.getClass());
+        }
+    }
+
+    private Object add(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            return ((Number) a).doubleValue() + ((Number) b).doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid arguments for add: " + a + ", " + b);
+    }
+
+    private Object subtract(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            return ((Number) a).doubleValue() - ((Number) b).doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid arguments for subtract: " + a + ", " + b);
+    }
+
+    private Object multiply(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            return ((Number) a).doubleValue() * ((Number) b).doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid arguments for multiply: " + a + ", " + b);
+    }
+
+    private Object divide(Object a, Object b) {
+        if (a instanceof Number && b instanceof Number) {
+            double divisor = ((Number) b).doubleValue();
+            if (divisor == 0) throw new ArithmeticException("Division by zero");
+            return ((Number) a).doubleValue() / divisor;
+        }
+        throw new IllegalArgumentException("Invalid arguments for divide: " + a + ", " + b);
     }
 
 }

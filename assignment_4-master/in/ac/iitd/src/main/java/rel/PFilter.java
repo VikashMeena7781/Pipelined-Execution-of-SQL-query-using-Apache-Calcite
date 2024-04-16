@@ -15,13 +15,10 @@ import java.util.List;
 
 public class PFilter extends Filter implements PRel {
 
-//    private final RelNode input;
-    private Object[] currentRow;
 
     private List<Object[]> data;
     int counter;
 
-//    private boolean temp=false;
 
     public PFilter(
             RelOptCluster cluster,
@@ -29,20 +26,7 @@ public class PFilter extends Filter implements PRel {
             RelNode child,
             RexNode condition) {
         super(cluster, traits, child, condition);
-//        this.input=child.getInputs();
-//        this.input=getInput();
-//        if (child instanceof PRel) {
-//            this.inputRel = (PRel) child;
-//        } else {
-//            throw new IllegalArgumentException("Child must be of type PRel");
-//        }
 
-        System.out.println("condition "+condition.toString());
-//        System.out.println("cluster "+ cluster.toString());
-//        System.out.println("traits "+traits.toString());
-//        System.out.println("child "+child.toString());
-
-//        this.input=child;
         assert getConvention() instanceof PConvention;
     }
 
@@ -59,21 +43,13 @@ public class PFilter extends Filter implements PRel {
     @Override
     public boolean open() {
         logger.trace("Opening PFilter");
-//        if (input instanceof PRel) {
-//            PRel pInput = (PRel) input;
-//            return pInput.open();
-//        }
-//        return false;
-//        System.out.println("Storing input1");
         if(input instanceof PRel){
             ((PRel) input).open();
-//            System.out.println("Storing input2");
             data=new ArrayList<>();
             counter=0;
             while (((PRel) input).hasNext()) {
                 data.add(((PRel) input).next());
             }
-//            System.out.println("size "+counter);
             ((PRel)input).close();
             return true;
         }
@@ -83,32 +59,17 @@ public class PFilter extends Filter implements PRel {
     @Override
     public void close() {
         logger.trace("Closing PFilter");
-//        if (input instanceof PRel) {
-//            PRel pInput = (PRel) input;
-//            pInput.close();
-//        }
         data.clear();
     }
 
     @Override
     public boolean hasNext() {
         logger.trace("Checking if PFilter has next");
-//        if(input instanceof PRel){
-//            while (((PRel)input).hasNext()) {
-//                Object[] row = ((PRel) input).next();
-//                if (evaluateCondition(condition,row)) {
-//                    System.out.println("Printing the Filtered obj " + Arrays.toString(row));
-//                    currentRow = row;
-//                    return true;
-//                }
-//            }
-//        }
         int temp=counter;
         while(temp<data.size()){
             Object[] row = data.get(temp);
             temp++;
             if(evaluateCondition(condition,row)){
-//                currentRow=row;
                 return true;
             }
 
@@ -119,18 +80,11 @@ public class PFilter extends Filter implements PRel {
     @Override
     public Object[] next() {
         logger.trace("Getting next row from PFilter");
-//        if (currentRow!=null) {
-//            Object[] row = currentRow;
-//            currentRow = null;
-////            System.out.println("Printing the Filtered obj " + Arrays.toString(row));
-//            return row;
-//        }
         if(hasNext()) {
             while (counter < data.size()) {
                 Object[] row = data.get(counter);
                 counter++;
                 if (evaluateCondition(condition, row)) {
-//                    currentRow=row;
                     return row;
                 }
             }
@@ -265,8 +219,6 @@ public class PFilter extends Filter implements PRel {
         if (node instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) node;
             Object value = literal.getValue();
-//            System.out.println("value type "+value.getClass());
-//            System.out.println("value "+value);
             if (value instanceof BigDecimal) {
                 return (BigDecimal) value;
             } else if (value instanceof NlsString) {
@@ -279,8 +231,6 @@ public class PFilter extends Filter implements PRel {
             }
         } else if (node instanceof RexInputRef) {
             RexInputRef ref = (RexInputRef) node;
-//            System.out.println("value type1 "+row[ref.getIndex()].getClass());
-//            System.out.println("value1 "+row[ref.getIndex()]);
             return (Comparable) row[ref.getIndex()];
         } else if (node instanceof RexCall) {
             RexCall call = (RexCall) node;
@@ -296,7 +246,6 @@ public class PFilter extends Filter implements PRel {
                 if (right instanceof BigDecimal) {
                     right = convertBigDecimal(right);
                 }
-                // Handle arithmetic operations based on the types of left and right
                 if (left instanceof Double && right instanceof Double) {
                     if (call.getKind() == SqlKind.PLUS) {
                         return (Double) left + (Double) right;
@@ -359,9 +308,7 @@ public class PFilter extends Filter implements PRel {
                     } else if (call.getKind() == SqlKind.DIVIDE) {
                         return (Float) left / ((Integer) right).floatValue();
                     }
-//                    return (Float) left + ((Integer) right).floatValue();
                 } else if (left instanceof Integer && right instanceof Float) {
-                    // Convert left to Float
                     if (call.getKind() == SqlKind.PLUS) {
                         return ((Integer) left).floatValue() + (float)right;
                     } else if (call.getKind() == SqlKind.MINUS) {
@@ -371,9 +318,7 @@ public class PFilter extends Filter implements PRel {
                     } else if (call.getKind() == SqlKind.DIVIDE) {
                         return ((Integer) left).floatValue() / (float)right;
                     }
-//                    return ((Integer) left).floatValue() + (Float) right;
                 }else if (left instanceof Float && right instanceof Double) {
-                    // Convert left to Double
                     if (call.getKind() == SqlKind.PLUS) {
                         return  ((Float) left).doubleValue() + (Double) right;
                     } else if (call.getKind() == SqlKind.MINUS) {
@@ -383,9 +328,7 @@ public class PFilter extends Filter implements PRel {
                     } else if (call.getKind() == SqlKind.DIVIDE) {
                         return ((Float) left).doubleValue() / (Double) right;
                     }
-//                    return ((Float) left).doubleValue() + (Double) right;
                 } else if (left instanceof Double && right instanceof Float) {
-                    // Convert right to Double
                     if (call.getKind() == SqlKind.PLUS) {
                         return (Double) left + ((Float) right).doubleValue();
                     } else if (call.getKind() == SqlKind.MINUS) {
@@ -409,13 +352,10 @@ public class PFilter extends Filter implements PRel {
     private Comparable convertBigDecimal(Comparable value) {
         BigDecimal bigDecimalValue = (BigDecimal) value;
         if (bigDecimalValue.scale() <= 0) {
-            // No fractional part, treat as Integer
             return bigDecimalValue.intValue();
         } else if (bigDecimalValue.scale() == 1) {
-            // One digit fractional part, treat as Float
             return bigDecimalValue.floatValue();
         } else {
-            // More than one digit fractional part, treat as Double
             return bigDecimalValue.doubleValue();
         }
 
